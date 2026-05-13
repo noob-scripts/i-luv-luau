@@ -451,10 +451,172 @@ static int db_setlocal(lua_State* L)
     return 1;
 }
 
+static int db_sethook(lua_State* L)
+{
+    luaL_checktype(L, 1, LUA_TFUNCTION);
+    int mask = (int)luaL_checkinteger(L, 2);
+    int count = (int)luaL_optinteger(L, 3, 0);
+
+    lua_sethook(L, lua_tocfunction(L, 1), mask, count);
+    return 0;
+}
+
+static int db_gethook(lua_State* L)
+{
+    lua_pushcfunction(L, lua_gethook(L));
+    lua_pushinteger(L, lua_gethookmask(L));
+    lua_pushinteger(L, lua_gethookcount(L));
+    return 3;
+}
+
+static int db_getstack(lua_State* L)
+{
+    int arg;
+    lua_State* L1 = getthread(L, &arg);
+
+    int level = (int)luaL_checkinteger(L, arg + 1);
+    int index = luaL_optinteger(L, arg + 2, -1);
+
+    if (unsigned(level) >= unsigned(L1->ci - L1->base_ci))
+        return 0;
+
+    CallInfo* ci = L1->ci - level;
+
+    StkId base = ci->base;
+
+    // single value mode
+    if (index > 0)
+    {
+        StkId slot = base + (index - 1);
+
+        if (slot >= L1->top || slot < L1->base)
+            return 0;
+
+        luaA_pushobject(L, slot);
+        return 1;
+    }
+
+    // table mode
+    lua_newtable(L);
+
+    int i = 1;
+    while (base + (i - 1) < L1->top)
+    {
+        luaA_pushobject(L, base + (i - 1));
+        lua_rawseti(L, -2, i++);
+    }
+
+    return 1;
+}
+
+static int db_setstack(lua_State* L)
+{
+    int arg;
+    lua_State* L1 = getthread(L, &arg);
+
+    int level = (int)luaL_checkinteger(L, arg + 1);
+    int index = (int)luaL_checkinteger(L, arg + 2);
+
+    luaL_checkany(L, arg + 3);
+
+    if (unsigned(level) >= unsigned(L1->ci - L1->base_ci))
+        return 0;
+
+    CallInfo* ci = L1->ci - level;
+    
+    if (!isLua(ci))
+        return 0;
+
+    StkId base = ci->base;
+
+    StkId slot = base + (index - 1);
+
+    if (slot < L1->base || slot >= L1->top)
+        return 0;
+
+    StkId value = L->top - 1;
+
+    setobj(L1, slot, value);
+
+    return 0;
+}
+
+static int db_getcallstack(lua_State* L)
+{
+    lua_State* L1 = L;
+    int top = lua_gettop(L);
+
+    lua_newtable(L); // result table
+    int outIndex = 1;
+
+    int depth = lua_stackdepth(L1);
+
+    for (int level = 0; level < depth; level++)
+    {
+        lua_Debug ar;
+        if (!lua_getinfo(L1, level, "slnf", &ar))
+            break;
+
+        lua_newtable(L);
+
+        lua_pushstring(L); lua_pushstring(L, ar.short_src); lua_setfield(L, -2, "source");
+        lua_pushstring(L); lua_pushinteger(L, ar.currentline); lua_setfield(L, -2, "line");
+        lua_pushstring(L); lua_pushstring(L, ar.name ? ar.name : ""); lua_setfield(L, -2, "name");
+
+        lua_rawseti(L, -2, outIndex++);
+    }
+
+    return 1;
+}
+
+static int db_validlevel(lua_State* L)
+{
+    int level = (int)luaL_checkinteger(L, 1);
+
+    lua_State* L1 = L;
+    if (lua_isthread(L, 2))
+        L1 = lua_tothread(L, 2);
+
+    int depth = lua_stackdepth(L1);
+
+    lua_pushboolean(L, level >= 0 && level < depth);
+    return 1;
+}
+
+static int db_setproto(lua_State* L)
+{
+    Closure* cl = (Closure*)luaA_toobject(L, 1);
+    luaL_argexpected(L, cl->isC == 0, 1, "Lua function");
+
+    Proto* p = cl->l.p;
+    luaL_checktype(L, 2, LUA_TNUMBER);
+    int idx = (int)lua_tointeger(L, 2) - 1;
+
+    const TValue* v = luaA_toobject(L, 3);
+
+    luaL_argexpected(L, ttisfunction(v) && !clvalue(v)->isC, 3, "Lua function");
+
+    Closure* newcl = clvalue(v);
+
+    if (!p || idx < 0 || idx >= p->sizep)
+        return 0;
+
+    // CRITICAL: safety check (avoid replacing active execution paths)
+    if (newcl->l.p->execdata || p->execdata)
+        luaL_error(L, "cannot modify protos of native/compiled functions");
+
+    p->p[idx] = newcl->l.p;
+
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 static const luaL_Reg dblib[] = {
     {"getinfo", db_getinfo},
     {"info", db_info},
     {"traceback", db_traceback},
+    {"getcallstack", db_getcallstack},
+    {"validlevel", db_validlevel},
     {"getconstant", db_getconstant},
     {"getconstants", db_getconstants},
     {"getupvalue", db_getupvalue},
@@ -462,12 +624,17 @@ static const luaL_Reg dblib[] = {
     {"setupvalue", db_setupvalue},
     {"getproto", db_getproto},
     {"getprotos", db_getprotos},
+    {"setproto", db_setproto},
     {"getlocal", db_getlocal},
     {"getlocals", db_getlocals},
     {"setlocal", db_setlocal},
-    {"setmetatable", db_setmetatable},
-    {"getmetatable", db_getmetatable},
+    {"getstack", db_getstack},
+    {"setstack", db_setstack},
+    {"gethook", db_gethook},
+    {"sethook", db_sethook},
     {"getregistry", db_getregistry},
+    {"getmetatable", db_getmetatable},
+    {"setmetatable", db_setmetatable},
     {NULL, NULL},
 };
 
