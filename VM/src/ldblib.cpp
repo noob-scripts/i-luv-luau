@@ -22,6 +22,62 @@ static lua_State* getthread(lua_State* L, int* arg)
     }
 }
 
+static int db_getinfo(lua_State* L)
+{
+    lua_State* L1;
+    int arg = 0;
+
+    L1 = getthread(L, &arg);
+
+    int level;
+    const char* what = "flnSu";
+
+    if (lua_isfunction(L, arg + 1))
+    {
+        lua_pushvalue(L, arg + 1);
+        level = -lua_gettop(L); // pseudo-level (function mode)
+    }
+    else
+    {
+        level = (int)luaL_checkinteger(L, arg + 1);
+    }
+
+    lua_Debug ar;
+    if (!lua_getinfo(L1, level, what, &ar))
+        return 0;
+
+    lua_newtable(L);
+
+    lua_pushstring(L, ar.source);
+    lua_setfield(L, -2, "source");
+
+    lua_pushstring(L, ar.short_src);
+    lua_setfield(L, -2, "short_src");
+
+    lua_pushinteger(L, ar.currentline);
+    lua_setfield(L, -2, "currentline");
+
+    lua_pushinteger(L, ar.linedefined);
+    lua_setfield(L, -2, "linedefined");
+
+    lua_pushstring(L, ar.what);
+    lua_setfield(L, -2, "what");
+
+    lua_pushinteger(L, ar.nparams);
+    lua_setfield(L, -2, "nparams");
+
+    lua_pushboolean(L, ar.isvararg);
+    lua_setfield(L, -2, "isvararg");
+
+    if (ar.name)
+    {
+        lua_pushstring(L, ar.name);
+        lua_setfield(L, -2, "name");
+    }
+
+    return 1;
+}
+
 static int db_info(lua_State* L)
 {
     int arg;
@@ -277,6 +333,7 @@ static int db_getregistry(lua_State* L)
 }
 
 static const luaL_Reg dblib[] = {
+    {"getinfo", db_getinfo},
     {"info", db_info},
     {"traceback", db_traceback},
     {"getconstant", db_getconstant},
