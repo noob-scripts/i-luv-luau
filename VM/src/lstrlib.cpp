@@ -36,6 +36,9 @@ static int str_dump(lua_State* L)
 
     Proto* p = cl->l.p;
 
+    if (!p || !p->code)
+        return 0;
+
     size_t size = p->sizecode * sizeof(Instruction);
 
     lua_pushlstring(L, (const char*)p->code, size);
