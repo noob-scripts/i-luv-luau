@@ -157,20 +157,23 @@ static int db_getupvalue(lua_State* L)
     return 2;
 }
 
-static int db_getconstant(lua_State* L)
+static int db_getupvalues(lua_State* L)
 {
     Closure* cl = (Closure*)luaA_toobject(L, 1);
     luaL_argexpected(L, cl->isC == 0, 1, "Lua function");
 
-    Proto* p = cl->l.p;
+    lua_newtable(L);
 
-    int idx = (int)luaL_checkinteger(L, 2) - 1;
+    for (int i = 0; i < cl->nupvalues; i++)
+    {
+        UpVal* uv = cl->l.uprefs[i];
+        TValue* v = (uv->v == &uv->u.value) ? &uv->u.value : uv->v;
 
-    if (!p || !p->k || idx < 0 || idx >= p->sizek)
-        return 0;
-
-    setobj2s(L, L->top, &p->k[idx]);
-    incr_top(L);
+        lua_pushinteger(L, i + 1);
+        setobj2s(L, L->top, v);
+        incr_top(L);
+        lua_settable(L, -3);
+    }
 
     return 1;
 }
