@@ -1,5 +1,9 @@
 // This file is part of the Luau programming language and is licensed under MIT License; see LICENSE.txt for details
 // This code is based on Lua 5.x implementation licensed under MIT License; see lua_LICENSE.txt for details
+#include "lapi.h"
+#include "lfunc.h"
+#include "lobject.h"
+#include "lvm.h"
 #include "lualib.h"
 
 #include "lstring.h"
@@ -16,6 +20,30 @@ static int str_len(lua_State* L)
     size_t l;
     luaL_checklstring(L, 1, &l);
     lua_pushinteger(L, (int)l);
+    return 1;
+}
+
+static int str_dump(lua_State* L)
+{
+    luaL_checktype(L, 1, LUA_TFUNCTION);
+
+    const TValue* obj = luaA_toobject(L, 1);
+
+    if (!ttisfunction(obj))
+        luaL_error(L, "function expected");
+
+    Closure* cl = clvalue(obj);
+
+    if (cl->isC)
+        luaL_error(L, "cannot dump C functions");
+
+    Proto* p = cl->l.p;
+
+    // TODO: serialize proto into bytecode blob
+    std::string bytecode = serializeProto(p);
+
+    lua_pushlstring(L, bytecode.data(), bytecode.size());
+
     return 1;
 }
 
@@ -1647,6 +1675,7 @@ static const luaL_Reg strlib[] = {
     {"byte", str_byte},
     {"char", str_char},
     {"find", str_find},
+    {"dump", str_dump},
     {"format", str_format},
     {"gmatch", gmatch},
     {"gsub", str_gsub},
