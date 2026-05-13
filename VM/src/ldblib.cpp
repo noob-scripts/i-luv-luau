@@ -131,9 +131,159 @@ static int db_traceback(lua_State* L)
     return 1;
 }
 
+static int db_getupvalue(lua_State* L)
+{
+    Closure* cl = (Closure*)luaA_toobject(L, 1);
+    luaL_argexpected(L, cl->isC == 0, 1, "Lua function");
+
+    int idx = (int)luaL_checkinteger(L, 2) - 1;
+
+    if (idx < 0 || idx >= cl->nupvalues)
+        return 0;
+
+    UpVal* uv = cl->l.uprefs[idx];
+
+    const char* name =
+        (cl->l.p && cl->l.p->upvalues && idx < cl->l.p->sizeupvalues)
+            ? getstr(cl->l.p->upvalues[idx])
+            : "";
+
+    TValue* v = (uv->v == &uv->u.value) ? &uv->u.value : uv->v;
+
+    setobj2s(L, L->top, v);
+    incr_top(L);
+
+    lua_pushstring(L, name);
+    return 2;
+}
+
+static int db_getconstant(lua_State* L)
+{
+    Closure* cl = (Closure*)luaA_toobject(L, 1);
+    luaL_argexpected(L, cl->isC == 0, 1, "Lua function");
+
+    Proto* p = cl->l.p;
+
+    int idx = (int)luaL_checkinteger(L, 2) - 1;
+
+    if (!p || !p->k || idx < 0 || idx >= p->sizek)
+        return 0;
+
+    setobj2s(L, L->top, &p->k[idx]);
+    incr_top(L);
+
+    return 1;
+}
+
+static int db_setupvalue(lua_State* L)
+{
+    Closure* cl = (Closure*)luaA_toobject(L, 1);
+    luaL_argexpected(L, cl->isC == 0, 1, "Lua function");
+
+    int idx = (int)luaL_checkinteger(L, 2) - 1;
+
+    if (idx < 0 || idx >= cl->nupvalues)
+        return 0;
+
+    luaL_checkany(L, 3);
+
+    UpVal* uv = cl->l.uprefs[idx];
+
+    TValue* target = (uv->v == &uv->u.value) ? &uv->u.value : uv->v;
+
+    setobj(L, target, L->top - 1);
+
+    const char* name =
+        (cl->l.p && cl->l.p->upvalues && idx < cl->l.p->sizeupvalues)
+            ? getstr(cl->l.p->upvalues[idx])
+            : "";
+
+    L->top--;
+
+    lua_pushstring(L, name);
+    return 1;
+}
+
+static int db_getconstant(lua_State* L)
+{
+    Closure* cl = (Closure*)luaA_toobject(L, 1);
+    luaL_argexpected(L, cl->isC == 0, 1, "Lua function");
+
+    Proto* p = cl->l.p;
+
+    int idx = (int)luaL_checkinteger(L, 2) - 1;
+
+    if (!p || !p->k || idx < 0 || idx >= p->sizek)
+        return 0;
+
+    setobj2s(L, L->top, &p->k[idx]);
+    incr_top(L);
+
+    return 1;
+}
+
+static int db_getconstants(lua_State* L)
+{
+    Closure* cl = (Closure*)luaA_toobject(L, 1);
+    luaL_argexpected(L, cl->isC == 0, 1, "Lua function");
+
+    Proto* p = cl->l.p;
+    if (!p || !p->k)
+        return 0;
+
+    lua_newtable(L);
+
+    for (int i = 0; i < p->sizek; i++)
+    {
+        lua_pushinteger(L, i + 1);
+        setobj2s(L, L->top, &p->k[i]);
+        incr_top(L);
+        lua_settable(L, -3);
+    }
+
+    return 1;
+}
+
+static int db_getmetatable(lua_State* L)
+{
+    luaL_checkany(L, 1);
+
+    if (!lua_getmetatable(L, 1))
+    {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    return 1;
+}
+
+static int db_setmetatable(lua_State* L)
+{
+    int t = lua_type(L, 2);
+    luaL_checktype(L, 1, LUA_TTABLE);
+    luaL_argexpected(L, t == LUA_TNIL || t == LUA_TTABLE, 2, "nil or table");
+    lua_settop(L, 2);
+    lua_setmetatable(L, 1);
+    return 1;
+}
+
+static int db_getregistry(lua_State* L)
+{
+    lua_pushvalue(L, LUA_REGISTRYINDEX);
+    return 1;
+}
+
 static const luaL_Reg dblib[] = {
     {"info", db_info},
     {"traceback", db_traceback},
+    {"getconstant", db_getconstant},
+    {"getconstants", db_getconstants},
+    {"getupvalue", db_getupvalue},
+    {"getupvalues", db_getupvalues},
+    {"setupvalue", db_setupvalue},
+    {"setmetatable", db_setmetatable},
+    {"getmetatable", db_getmetatable},
+    {"getregistry", db_getregistry},
     {NULL, NULL},
 };
 
