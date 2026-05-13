@@ -381,6 +381,76 @@ static int db_getprotos(lua_State* L)
     return 1;
 }
 
+static int db_getlocal(lua_State* L)
+{
+    int arg;
+    lua_State* L1 = getthread(L, &arg);
+
+    int level = (int)luaL_checkinteger(L, arg + 1);
+    int idx = (int)luaL_checkinteger(L, arg + 2);
+
+    const char* name = lua_getlocal(L1, level, idx);
+
+    if (!name)
+        return 0;
+
+    lua_pushstring(L, name);
+
+    return 2;
+}
+
+static int db_getlocals(lua_State* L)
+{
+    int arg;
+    lua_State* L1 = getthread(L, &arg);
+
+    int level = (int)luaL_checkinteger(L, arg + 1);
+
+    lua_newtable(L);
+
+    int i = 1;
+
+    while (true)
+    {
+        const char* name = lua_getlocal(L1, level, i);
+
+        if (!name)
+            break;
+
+        lua_setfield(L, -2, name);
+
+        i++;
+    }
+
+    return 1;
+}
+
+static int db_setlocal(lua_State* L)
+{
+    int arg;
+    lua_State* L1 = getthread(L, &arg);
+
+    int level = (int)luaL_checkinteger(L, arg + 1);
+    int idx = (int)luaL_checkinteger(L, arg + 2);
+
+    luaL_checkany(L, arg + 3);
+
+    lua_pushvalue(L, arg + 3);
+
+    const char* name = lua_setlocal(L1, level, idx);
+
+    if (!name)
+    {
+        lua_pop(L, 1);
+        return 0;
+    }
+
+    lua_pop(L, 1);
+
+    lua_pushstring(L, name);
+    return 1;
+}
+
 static const luaL_Reg dblib[] = {
     {"getinfo", db_getinfo},
     {"info", db_info},
@@ -392,6 +462,9 @@ static const luaL_Reg dblib[] = {
     {"setupvalue", db_setupvalue},
     {"getproto", db_getproto},
     {"getprotos", db_getprotos},
+    {"getlocal", db_getlocal},
+    {"getlocals", db_getlocals},
+    {"setlocal", db_setlocal},
     {"setmetatable", db_setmetatable},
     {"getmetatable", db_getmetatable},
     {"getregistry", db_getregistry},
