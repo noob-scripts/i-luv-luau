@@ -332,6 +332,55 @@ static int db_getregistry(lua_State* L)
     return 1;
 }
 
+static int db_getproto(lua_State* L)
+{
+    Closure* cl = (Closure*)luaA_toobject(L, 1);
+    luaL_argexpected(L, cl->isC == 0, 1, "Lua function");
+
+    int idx = (int)luaL_checkinteger(L, 2) - 1;
+
+    Proto* p = cl->l.p;
+    if (!p || idx < 0 || idx >= p->sizep)
+        return 0;
+
+    Proto* child = p->p[idx];
+
+    // wrap proto into a closure
+    Closure* newcl = luaF_newLclosure(L, 0, cl->env, child);
+
+    setclvalue(L, L->top, newcl);
+    incr_top(L);
+
+    return 1;
+}
+
+static int db_getprotos(lua_State* L)
+{
+    Closure* cl = (Closure*)luaA_toobject(L, 1);
+    luaL_argexpected(L, cl->isC == 0, 1, "Lua function");
+
+    Proto* p = cl->l.p;
+
+    lua_newtable(L);
+
+    if (!p || p->sizep == 0)
+        return 1;
+
+    for (int i = 0; i < p->sizep; i++)
+    {
+        Proto* child = p->p[i];
+
+        Closure* c = luaF_newLclosure(L, 0, cl->env, child);
+
+        setclvalue(L, L->top, c);
+        incr_top(L);
+
+        lua_rawseti(L, -2, i + 1);
+    }
+
+    return 1;
+}
+
 static const luaL_Reg dblib[] = {
     {"getinfo", db_getinfo},
     {"info", db_info},
@@ -341,6 +390,8 @@ static const luaL_Reg dblib[] = {
     {"getupvalue", db_getupvalue},
     {"getupvalues", db_getupvalues},
     {"setupvalue", db_setupvalue},
+    {"getproto", db_getproto},
+    {"getprotos", db_getprotos},
     {"setmetatable", db_setmetatable},
     {"getmetatable", db_getmetatable},
     {"getregistry", db_getregistry},
