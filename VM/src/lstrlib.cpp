@@ -1,3 +1,4 @@
+// This file is the Luau string library but with string.dump included.
 // This file is part of the Luau programming language and is licensed under MIT License; see LICENSE.txt for details
 // This code is based on Lua 5.x implementation licensed under MIT License; see lua_LICENSE.txt for details
 #include "lapi.h"
@@ -28,21 +29,16 @@ static int str_dump(lua_State* L)
     luaL_checktype(L, 1, LUA_TFUNCTION);
 
     const TValue* obj = luaA_toobject(L, 1);
-
-    if (!ttisfunction(obj))
-        luaL_error(L, "function expected");
-
     Closure* cl = clvalue(obj);
 
     if (cl->isC)
-        luaL_error(L, "cannot dump C functions");
+        luaL_error(L, "cannot dump C function.");
 
     Proto* p = cl->l.p;
 
-    // TODO: serialize proto into bytecode blob
-    std::string bytecode = serializeProto(p);
+    size_t size = p->sizecode * sizeof(Instruction);
 
-    lua_pushlstring(L, bytecode.data(), bytecode.size());
+    lua_pushlstring(L, (const char*)p->code, size);
 
     return 1;
 }
