@@ -1,3 +1,4 @@
+// On this one, I'll add custom extra functions
 // This file is part of the Luau programming language and is licensed under MIT License; see LICENSE.txt for details
 // This code is based on Lua 5.x implementation licensed under MIT License; see lua_LICENSE.txt for details
 #include "lualib.h"
@@ -16,6 +17,12 @@ LUAU_FASTFLAG(LuauStacklessPcall)
 static void writestring(const char* s, size_t l)
 {
     fwrite(s, 1, l, stdout);
+}
+
+static int luaB_getreg(lua_State* L)
+{
+    lua_pushvalue(L, LUA_REGISTRYINDEX);
+    return 1;
 }
 
 static int luaB_print(lua_State* L)
@@ -95,6 +102,18 @@ static int luaB_getmetatable(lua_State* L)
     return 1; // returns either __metatable field (if present) or metatable
 }
 
+static int luaB_getrawmetatable(lua_State* L)
+{
+    luaL_checkany(L, 1);
+    if (!lua_getmetatable(L, 1))
+    {
+        lua_pushnil(L);
+        return 1; // no metatable
+    }
+    // REMOVED: luaL_getmetafield(L, 1, "__metatable");
+    return 1; // returns raw metatable, ignoring __metatable
+}
+
 static int luaB_setmetatable(lua_State* L)
 {
     int t = lua_type(L, 2);
@@ -104,6 +123,18 @@ static int luaB_setmetatable(lua_State* L)
         luaL_error(L, "cannot change a protected metatable");
     lua_settop(L, 2);
     lua_setmetatable(L, 1);
+    return 1;
+}
+
+static int luaB_setrawmetatable(lua_State* L)
+{
+    int t = lua_type(L, 2);
+    luaL_checkany(L, 1);
+    luaL_argexpected(L, t == LUA_TNIL || t == LUA_TTABLE, 2, "nil or table");
+
+    lua_settop(L, 2);
+    lua_setmetatable(L, 1);
+
     return 1;
 }
 
@@ -461,12 +492,76 @@ static int luaB_newproxy(lua_State* L)
     return 1;
 }
 
+static int newcclosure_trampoline(lua_State* L)
+{
+    // upvalue 1 = registry reference
+    int ref = (int)lua_tointeger(L, lua_upvalueindex(1));
+
+    lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+
+    // move args to new call
+    int nargs = lua_gettop(L);
+
+    lua_insert(L, 1);
+
+    lua_call(L, nargs, LUA_MULTRET);
+
+    return lua_gettop(L);
+}
+
+static int luaB_newcclosure(lua_State* L)
+{
+    luaL_checktype(L, 1, LUA_TFUNCTION);
+
+    lua_pushvalue(L, 1);
+    int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+    lua_pushinteger(L, ref);
+
+    lua_pushcclosure(L, newcclosure_trampoline, 1);
+
+    return 1;
+}
+
+static int luaB_islclosure(lua_State* L)
+{
+    const TValue* v = luaA_toobject(L, 1);
+
+    if (!ttisfunction(v))
+    {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
+    Closure* cl = clvalue(v);
+
+    lua_pushboolean(L, !cl->isC);
+    return 1;
+}
+
+static int luaB_iscclosure(lua_State* L)
+{
+    const TValue* v = luaA_toobject(L, 1);
+
+    if (!ttisfunction(v))
+    {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
+    Closure* cl = clvalue(v);
+
+    lua_pushboolean(L, cl->isC);
+    return 1;
+}
+
 static const luaL_Reg base_funcs[] = {
     {"assert", luaB_assert},
     {"error", luaB_error},
     {"gcinfo", luaB_gcinfo},
     {"getfenv", luaB_getfenv},
     {"getmetatable", luaB_getmetatable},
+    {"getrawmetatable", luaB_getrawmetatable},
     {"next", luaB_next},
     {"newproxy", luaB_newproxy},
     {"print", luaB_print},
@@ -477,10 +572,15 @@ static const luaL_Reg base_funcs[] = {
     {"select", luaB_select},
     {"setfenv", luaB_setfenv},
     {"setmetatable", luaB_setmetatable},
+    {"setrawmetatable", luaB_setrawmetatable},
     {"tonumber", luaB_tonumber},
     {"tostring", luaB_tostring},
     {"type", luaB_type},
     {"typeof", luaB_typeof},
+    {"getreg", luaB_getreg},
+    {"newcclosure", luaB_newcclosure},
+    {"islclosure", luaB_islclosure},
+    {"iscclosure", luaB_iscclosure},
     {NULL, NULL},
 };
 
