@@ -7,12 +7,127 @@
 #include "lapi.h"
 #include "ldo.h"
 #include "ludata.h"
+#include "lobject.h"
+#include "lgc.h"
 
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 LUAU_FASTFLAG(LuauStacklessPcall)
+
+struct GetGCContext
+{
+    lua_State* L;
+    int index;
+    bool includetables;
+};
+
+static void getgc_add(lua_State* L, TValue* v, int* index)
+{
+    setobj2s(L, L->top, v);
+    incr_top(L);
+
+    lua_rawseti(L, -2, ++(*index));
+}
+
+static void getgc_node(
+    void* context,
+    void* ptr,
+    uint8_t tt,
+    uint8_t memcat,
+    size_t size,
+    const char* name
+)
+{
+    GetGCContext* ctx = (GetGCContext*)context;
+    lua_State* L = ctx->L;
+
+    TValue tmp;
+
+    switch (tt)
+    {
+    case LUA_TFUNCTION:
+    {
+        setclvalue(L, &tmp, (Closure*)ptr);
+        getgc_add(L, &tmp, &ctx->index);
+        break;
+    }
+
+    case LUA_TTABLE:
+    {
+        if (!ctx->includetables)
+            return;
+
+        sethvalue(L, &tmp, (LuaTable*)ptr);
+        getgc_add(L, &tmp, &ctx->index);
+        break;
+    }
+
+    case LUA_TTHREAD:
+    {
+        setthvalue(L, &tmp, (lua_State*)ptr);
+        getgc_add(L, &tmp, &ctx->index);
+        break;
+    }
+
+    case LUA_TUSERDATA:
+    {
+        setuvalue(L, &tmp, (Udata*)ptr);
+        getgc_add(L, &tmp, &ctx->index);
+        break;
+    }
+
+    case LUA_TSTRING:
+    {
+        setsvalue(L, &tmp, (TString*)ptr);
+        getgc_add(L, &tmp, &ctx->index);
+        break;
+    }
+
+#ifdef LUA_TBUFFER
+    case LUA_TBUFFER:
+    {
+        setbufvalue(L, &tmp, (Buffer*)ptr);
+        getgc_add(L, &tmp, &ctx->index);
+        break;
+    }
+#endif
+
+    default:
+        break;
+    }
+}
+
+static void getgc_edge(
+    void* context,
+    void* from,
+    void* to,
+    const char* name
+)
+{
+}
+
+static int luaB_getgc(lua_State* L)
+{
+    bool includetables = lua_toboolean(L, 1);
+
+    lua_newtable(L);
+
+    GetGCContext ctx;
+    ctx.L = L;
+    ctx.index = 0;
+    ctx.includetables = includetables;
+
+    luaC_enumheap(
+        L,
+        &ctx,
+        getgc_node,
+        getgc_edge
+    );
+
+    return 1;
+}
 
 static void writestring(const char* s, size_t l)
 {
@@ -559,6 +674,7 @@ static const luaL_Reg base_funcs[] = {
     {"assert", luaB_assert},
     {"error", luaB_error},
     {"gcinfo", luaB_gcinfo},
+    {"getgc", luaB_getgc},
     {"getfenv", luaB_getfenv},
     {"getmetatable", luaB_getmetatable},
     {"getrawmetatable", luaB_getrawmetatable},
@@ -611,6 +727,10 @@ int luaopen_base(lua_State* L)
 
     lua_pushcclosurek(L, luaB_xpcally, "xpcall", 0, luaB_xpcallcont);
     lua_setfield(L, -2, "xpcall");
+
+    // ypcall is just an alias of pcall here:
+    lua_pushcclosurek(L, luaB_pcally, "ypcall", 0, luaB_pcallcont);
+    lua_setfield(L, -2, "ypcall");
 
     return 1;
 }
