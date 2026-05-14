@@ -263,6 +263,45 @@ static int db_setupvalue(lua_State* L)
     return 1;
 }
 
+static int db_getupvaluename(lua_State* L)
+{
+    Closure* cl = clvalue(luaA_toobject(L, 1));
+
+    luaL_argexpected(L, !cl->isC, 1, "Lua closure");
+
+    int idx = luaL_checkinteger(L, 2) - 1;
+
+    if (idx < 0 || idx >= cl->l.p->sizeupvalues)
+        return 0;
+
+    TString* name = cl->l.p->upvalues[idx];
+
+    lua_pushstring(L, name ? getstr(name) : "");
+
+    return 1;
+}
+
+static int db_setupvaluename(lua_State* L)
+{
+    Closure* cl = clvalue(luaA_toobject(L, 1));
+
+    luaL_argexpected(L, !cl->isC, 1, "Lua closure");
+
+    int idx = luaL_checkinteger(L, 2) - 1;
+
+    const char* name = luaL_checkstring(L, 3);
+
+    if (idx < 0 || idx >= cl->l.p->sizeupvalues)
+        return 0;
+
+    TString* ts = luaS_new(L, name);
+
+    cl->l.p->upvalues[idx] = ts;
+
+    lua_pushboolean(L, true);
+    return 1;
+}
+
 static int db_getconstant(lua_State* L)
 {
     Closure* cl = (Closure*)luaA_toobject(L, 1);
@@ -635,6 +674,8 @@ static const luaL_Reg dblib[] = {
     {"getregistry", db_getregistry},
     {"getmetatable", db_getmetatable},
     {"setmetatable", db_setmetatable},
+    {"setupvaluename", db_setupvaluename},
+    {"getupvaluename", db_getupvaluene},
     {NULL, NULL},
 };
 
