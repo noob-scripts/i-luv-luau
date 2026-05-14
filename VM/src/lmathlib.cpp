@@ -38,6 +38,14 @@ static void pcg32_seed(uint64_t* state, uint64_t seed)
     pcg32_random(state);
 }
 
+static uint64_t splitmix64(uint64_t x)
+{
+    x += 0x9e3779b97f4a7c15ULL;
+    x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+    return x ^ (x >> 31);
+}
+
 static int math_abs(lua_State* L)
 {
     lua_pushnumber(L, fabs(luaL_checknumber(L, 1)));
@@ -277,9 +285,27 @@ static int math_random(lua_State* L)
 
 static int math_randomseed(lua_State* L)
 {
-    int seed = luaL_checkinteger(L, 1);
+    uint64_t seed;
+
+    if (lua_isnoneornil(L, 1))
+    {
+        seed = lua_encodepointer(L, uintptr_t(L));
+
+        seed ^= uint64_t(time(NULL)) << 32;
+        seed ^= uintptr_t(&seed);
+        seed ^= uintptr_t(L->global);
+
+        seed = splitmix64(seed);
+    }
+    else
+    {
+        seed = splitmix64((uint64_t)luaL_checknumber(L, 1));
+    }
+
+    L->global->rngseed = seed;
 
     pcg32_seed(&L->global->rngstate, seed);
+
     return 0;
 }
 
@@ -516,9 +542,13 @@ static const luaL_Reg mathlib[] = {
 */
 int luaopen_math(lua_State* L)
 {
+    // better seeding
     uint64_t seed = lua_encodepointer(L, uintptr_t(L));
-    seed ^= time(NULL);
-    seed ^= clock();
+
+    seed ^= uint64_t(time(NULL)) << 32;
+    seed ^= uintptr_t(&seed);
+    seed ^= uintptr_t(L->global);
+    seed = splitmix64(seed)
 
     pcg32_seed(&L->global->rngstate, seed);
 
@@ -538,6 +568,13 @@ int luaopen_math(lua_State* L)
     lua_setfield(L, -2, "sqrt2");
     lua_pushnumber(L, LUAU_TAU);
     lua_setfield(L, -2, "tau");
-
+    lua_pushnumber(L, 9007199254740991.0);
+    lua_setfield(L, -2, "maxsafeinteger");
+    lua_pushnumber(L, -9007199254740991.0);
+    lua_setfield(L, -2, "minsafeinteger");
+    lua_pushnumber(L, 4294967295.0);
+    lua_setfield(L, -2, "maxuint32");
+    lua_pushnumber(L, 18446744073709551615.0);
+    lua_setfield(L, -2, "maxuint64");
     return 1;
 }
