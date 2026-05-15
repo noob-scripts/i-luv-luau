@@ -1,5 +1,5 @@
-// lhooking.cpp
-// Custom hooking library for Luau
+// loth.cpp
+// Advanced hooking library for Luau
 
 #include "loth.h"
 
@@ -12,6 +12,19 @@
 
 #include <unordered_map>
 
+struct HookContext
+{
+    lua_State* originalThread;
+    Closure* rootFunction;
+    bool active;
+};
+
+static thread_local HookContext gHookCtx = {
+    nullptr,
+    nullptr,
+    false
+};
+
 static std::unordered_map<Closure*, Closure*> gHooks;
 static std::unordered_map<Closure*, Closure*> gOriginals;
 
@@ -22,9 +35,19 @@ static int oth_dispatch(lua_State* L)
     if (!target)
         return 0;
 
+    bool oldActive = gHookCtx.active;
+    lua_State* oldThread = gHookCtx.originalThread;
+    Closure* oldRoot = gHookCtx.rootFunction;
+
+    gHookCtx.active = true;
+    gHookCtx.originalThread = L;
+    gHookCtx.rootFunction = target;
+
+    int results = 0;
+
     if (target->isC)
     {
-        return target->c.f(L);
+        results = target->c.f(L);
     }
     else
     {
@@ -37,11 +60,17 @@ static int oth_dispatch(lua_State* L)
 
         lua_call(L, nargs, LUA_MULTRET);
 
-        return lua_gettop(L);
+        results = lua_gettop(L);
     }
+
+    gHookCtx.active = oldActive;
+    gHookCtx.originalThread = oldThread;
+    gHookCtx.rootFunction = oldRoot;
+
+    return results;
 }
 
-static Closure* oth_makecclosure(lua_State* L, Closure* cl)
+Closure* oth_makecclosure(lua_State* L, Closure* cl)
 {
     if (cl->isC)
         return cl;
@@ -134,6 +163,38 @@ static int oth_gethook(lua_State* L)
     return 1;
 }
 
+static int oth_getrootcallback(lua_State* L)
+{
+    if (!gHookCtx.active || !gHookCtx.rootFunction)
+    {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    setclvalue(L, L->top, gHookCtx.rootFunction);
+    incr_top(L);
+
+    return 1;
+}
+
+static int oth_ishookthread(lua_State* L)
+{
+    lua_pushboolean(L, gHookCtx.active);
+    return 1;
+}
+
+static int oth_getoriginalthread(lua_State* L)
+{
+    if (!gHookCtx.active || !gHookCtx.originalThread)
+    {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    lua_pushthread(gHookCtx.originalThread);
+    return 1;
+}
+
 static int oth_hookmetamethod(lua_State* L)
 {
     luaL_checkany(L, 1);
@@ -192,6 +253,10 @@ static const luaL_Reg othlib[] = {
     {"ishooked", oth_ishooked},
     {"gethook", oth_gethook},
 
+    {"get_root_callback", oth_getrootcallback},
+    {"is_hook_thread", oth_ishookthread},
+    {"get_original_thread", oth_getoriginalthread},
+
     {"hookmetamethod", oth_hookmetamethod},
     {"unhookmetamethod", oth_unhookmetamethod},
 
@@ -245,6 +310,7 @@ int luaopen_oth(lua_State* L)
     lua_setglobal(L, "ishooked");
 
     lua_pop(L, 1);
+
     lua_getfield(L, -1, "newcclosure");
 
     lua_pushvalue(L, -1);
