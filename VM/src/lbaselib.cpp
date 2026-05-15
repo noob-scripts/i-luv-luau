@@ -607,37 +607,6 @@ static int luaB_newproxy(lua_State* L)
     return 1;
 }
 
-static int newcclosure_trampoline(lua_State* L)
-{
-    // upvalue 1 = registry reference
-    int ref = (int)lua_tointeger(L, lua_upvalueindex(1));
-
-    lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
-
-    // move args to new call
-    int nargs = lua_gettop(L);
-
-    lua_insert(L, 1);
-
-    lua_call(L, nargs, LUA_MULTRET);
-
-    return lua_gettop(L);
-}
-
-static int luaB_newcclosure(lua_State* L)
-{
-    luaL_checktype(L, 1, LUA_TFUNCTION);
-
-    lua_pushvalue(L, 1);
-    int ref = luaL_ref(L, LUA_REGISTRYINDEX);
-
-    lua_pushinteger(L, ref);
-
-    lua_pushcclosure(L, newcclosure_trampoline, 1);
-
-    return 1;
-}
-
 static int luaB_islclosure(lua_State* L)
 {
     const TValue* v = luaA_toobject(L, 1);
@@ -670,6 +639,8 @@ static int luaB_iscclosure(lua_State* L)
     return 1;
 }
 
+// newcclosure was moved to lhooking.cpp, for a much better newcclosure!
+
 static const luaL_Reg base_funcs[] = {
     {"assert", luaB_assert},
     {"error", luaB_error},
@@ -694,7 +665,6 @@ static const luaL_Reg base_funcs[] = {
     {"type", luaB_type},
     {"typeof", luaB_typeof},
     {"getreg", luaB_getreg},
-    {"newcclosure", luaB_newcclosure},
     {"islclosure", luaB_islclosure},
     {"iscclosure", luaB_iscclosure},
     {NULL, NULL},
