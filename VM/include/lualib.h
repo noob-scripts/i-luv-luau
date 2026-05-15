@@ -119,6 +119,9 @@ LUALIB_API int luaopen_base(lua_State* L);
 #define LUA_COLIBNAME "coroutine"
 LUALIB_API int luaopen_coroutine(lua_State* L);
 
+#define LUA_OTHLIBNAME "oth"
+LUALIB_API int luaopen_oth(lua_State* L);
+
 #define LUA_TABLIBNAME "table"
 LUALIB_API int luaopen_table(lua_State* L);
 
