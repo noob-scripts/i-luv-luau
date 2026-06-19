@@ -1,3 +1,7 @@
+# I-Luv-LuaU
+
+I-luv-luau is a fork of luau that has very powerful features than normal luau, less sandboxing, more freedom!!! it includes a huge extension of the global environment and debug library, custom libraries such as `oth` that has very powerful runtime features like introspection, `LUA_REGISTRYINDEX`, `GC Internals` and Closures Hooking!
+
 Luau ![CI](https://github.com/luau-lang/luau/actions/workflows/build.yml/badge.svg) [![codecov](https://codecov.io/gh/luau-lang/luau/branch/master/graph/badge.svg)](https://codecov.io/gh/luau-lang/luau)
 ====
 
