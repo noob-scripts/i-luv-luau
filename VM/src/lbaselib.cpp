@@ -159,36 +159,85 @@ static int luaB_print(lua_State* L)
 static int luaB_tonumber(lua_State* L)
 {
     int base = luaL_optinteger(L, 2, 10);
+
     if (base == 10)
-    { // standard conversion
+    {
+        const char* s = lua_tostring(L, 1);
+
+        if (s)
+        {
+            while (isspace((unsigned char)*s))
+                ++s;
+
+            bool neg = false;
+            if (*s == '+' || *s == '-')
+            {
+                neg = (*s == '-');
+                ++s;
+            }
+
+            if (s[0] == '0' && (s[1] == 'b' || s[1] == 'B'))
+            {
+                char* end;
+                unsigned long long n = strtoull(s + 2, &end, 2);
+
+                while (isspace((unsigned char)*end))
+                    ++end;
+
+                if (*end == '\0')
+                {
+                    lua_pushnumber(L, neg ? -(double)n : (double)n);
+                    return 1;
+                }
+            }
+        }
+
         int isnum = 0;
         double n = lua_tonumberx(L, 1, &isnum);
+
         if (isnum)
         {
             lua_pushnumber(L, n);
             return 1;
         }
-        luaL_checkany(L, 1); // error if we don't have any argument
+
+        luaL_checkany(L, 1);
     }
     else
     {
         const char* s1 = luaL_checkstring(L, 1);
+
         luaL_argcheck(L, 2 <= base && base <= 36, 2, "base out of range");
+
+        bool neg = false;
+        if (*s1 == '+' || *s1 == '-')
+        {
+            neg = (*s1 == '-');
+            ++s1;
+        }
+
         char* s2;
         unsigned long long n;
-        n = strtoull(s1, &s2, base);
+
+        if (base == 2 && s1[0] == '0' && (s1[1] == 'b' || s1[1] == 'B'))
+            n = strtoull(s1 + 2, &s2, 2);
+        else
+            n = strtoull(s1, &s2, base);
+
         if (s1 != s2)
-        { // at least one valid digit?
-            while (isspace((unsigned char)(*s2)))
-                s2++; // skip trailing spaces
+        {
+            while (isspace((unsigned char)*s2))
+                ++s2;
+
             if (*s2 == '\0')
-            { // no invalid trailing characters?
-                lua_pushnumber(L, (double)n);
+            {
+                lua_pushnumber(L, neg ? -(double)n : (double)n);
                 return 1;
             }
         }
     }
-    lua_pushnil(L); // else not a number
+
+    lua_pushnil(L);
     return 1;
 }
 
