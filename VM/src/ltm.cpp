@@ -56,6 +56,7 @@ const char* const luaT_eventname[] = {
     "__concat",
     "__type",
     "__metatable",
+    "__tonumber"
 };
 // clang-format on
 
