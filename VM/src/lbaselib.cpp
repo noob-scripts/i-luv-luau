@@ -450,8 +450,20 @@ static int luaB_ipairs(lua_State* L)
 static int luaB_assert(lua_State* L)
 {
     luaL_checkany(L, 1);
+
     if (!lua_toboolean(L, 1))
+    {
+        if (lua_isfunction(L, 2))
+        {
+            lua_pushvalue(L, 2);
+            lua_call(L, 0, 0);
+
+            luaL_error(L, "%s", luaL_optstring(L, 3, "assertion failed!"));
+        }
+
         luaL_error(L, "%s", luaL_optstring(L, 2, "assertion failed!"));
+    }
+
     return lua_gettop(L);
 }
 
