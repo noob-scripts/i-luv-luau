@@ -35,6 +35,7 @@ typedef enum
     TM_CONCAT,
     TM_TYPE,
     TM_METATABLE,
+    TM_TONUMBER,
 
     TM_N // number of elements in the enum
 } TMS;
