@@ -237,6 +237,19 @@ static int luaB_tonumber(lua_State* L)
         }
     }
 
+    if (luaL_getmetafield(L, 1, "__tonumber"))
+    {
+        // Stack: ... metamethod
+
+        lua_pushvalue(L, 1);      // Push self
+        lua_call(L, 1, 1);        // __tonumber(self)
+
+        if (!(lua_isnumber(L, -1) || lua_isinteger(L, -1)) && !lua_isnil(L, -1))
+            return luaL_error(L, "__tonumber must return a number or nil");
+        
+        return 1;
+    }
+
     lua_pushnil(L);
     return 1;
 }
